@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+/*
+  Tokens de diseño. El acento es blue-800; los fondos son blancos "rotos"
+  (ligeramente fríos) para que la página nunca sea blanco puro.
+*/
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, sans-serif;
+
+  --color-marca: var(--color-blue-800);       /* #1e40af */
+  --color-marca-fuerte: var(--color-blue-900);
+  --color-marca-suave: #e8eefb;               /* fondos de estado activo */
+  --color-marca-anillo: #dfe7fa;              /* anillo de foco */
+
+  --color-fondo: #f3f5f9;       /* fondo de la página y de los campos */
+  --color-superficie: #fafbfd;  /* tarjetas, encabezado, modal */
+  --color-hundido: #eef1f6;     /* iconos neutros, bloques secundarios */
+  --color-borde: #dde3ec;       /* bordes de tarjetas */
+  --color-borde-campo: #d3dae5; /* bordes de campos */
+  --color-borde-fuerte: #c9d3e3;/* botones secundarios */
+
+  --color-tinta: #1b2333;       /* texto principal */
+  --color-tinta-suave: #5b6578; /* texto secundario */
+
+  --color-contador: #c45500;    /* número del carrito (naranja estilo Amazon, con contraste AA sobre fondo claro) */
+}
+
+/* Base de todos los botones; en Tailwind v4 solo las utilidades se pueden usar con @apply */
+@utility btn {
+  @apply inline-flex h-11 items-center justify-center gap-2 rounded-[10px] px-[18px] text-sm font-semibold
+    whitespace-nowrap transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-fondo);
+    color: var(--color-tinta);
+    -webkit-font-smoothing: antialiased;
+    scrollbar-gutter: stable; /* evita que el layout "brinque" al cambiar de página */
+  }
+  body {
+    min-height: 100dvh;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-marca);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .tarjeta {
+    @apply rounded-2xl border border-borde bg-superficie;
+  }
+
+  .titulo {
+    @apply font-display text-[36px] leading-tight font-semibold tracking-[-0.01em] text-tinta;
+  }
+  .antetitulo {
+    @apply text-[13px] font-semibold tracking-[0.08em] text-marca uppercase;
+  }
+
+  .etiqueta {
+    @apply mb-2 block text-sm font-medium text-tinta;
+  }
+  .etiqueta .requerido {
+    @apply text-marca;
+  }
+
+  .campo {
+    @apply block h-[46px] w-full rounded-[10px] border border-borde-campo bg-fondo px-3.5 text-[15px] text-tinta
+      placeholder:text-tinta-suave/80 transition
+      focus:border-marca focus:bg-superficie focus:shadow-[0_0_0_4px_var(--color-marca-anillo)] focus:outline-none
+      focus:ring-1 focus:ring-marca;
+  }
+
+  .btn-primario {
+    @apply btn bg-marca text-white hover:bg-marca-fuerte;
+  }
+  .btn-secundario {
+    @apply btn border border-borde-fuerte bg-superficie text-tinta hover:bg-hundido;
+  }
+  .btn-fantasma {
+    @apply btn font-medium text-tinta-suave hover:bg-hundido hover:text-tinta;
+  }
+  .btn-peligro {
+    @apply btn bg-red-700 text-white hover:bg-red-800;
+  }
+  .btn-peligro-contorno {
+    @apply btn border border-red-700 bg-superficie text-red-700 hover:bg-red-50;
+  }
+
+  /* Botón de opción con forma de píldora (género) */
+  .pildora {
+    @apply inline-flex h-11 cursor-pointer items-center gap-2 rounded-full border border-borde-campo bg-fondo px-4 text-sm
+      transition hover:border-borde-fuerte
+      has-checked:border-2 has-checked:border-marca has-checked:bg-marca-suave has-checked:font-semibold has-checked:text-marca
+      has-focus-visible:shadow-[0_0_0_4px_var(--color-marca-anillo)];
+  }
+  .pildora input {
+    @apply accent-marca;
+  }
+}
+
+/* --- Transición entre páginas (RouterView) --------------------------------- */
+.pagina-enter-active,
+.pagina-leave-active {
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+.pagina-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.pagina-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* --- Modal ---------------------------------------------------------------- */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 180ms ease;
+}
+.modal-enter-active .modal-panel,
+.modal-leave-active .modal-panel {
+  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 180ms ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from .modal-panel,
+.modal-leave-to .modal-panel {
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+}
+
+/* --- Contador del carrito: rebote al cambiar la cantidad ---------------------- */
+@keyframes rebote {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.rebote {
+  animation: rebote 320ms ease-out;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* --- Barra de guardado ---------------------------------------------------- */
+.barra-enter-active,
+.barra-leave-active {
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+.barra-enter-from,
+.barra-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pagina-enter-active,
+  .pagina-leave-active,
+  .modal-enter-active,
+  .modal-leave-active,
+  .modal-enter-active .modal-panel,
+  .modal-leave-active .modal-panel,
+  .barra-enter-active,
+  .barra-leave-active {
+    transition: none;
+  }
+  .rebote {
+    animation: none;
+  }
+}

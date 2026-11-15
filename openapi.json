@@ -1,0 +1,717 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Servicio web de usuarios y tienda",
+    "version": "1.0.0",
+    "description": "Servicio REST (Java 8, Jersey 2.24, Tomcat 8.5) con usuarios, catálogo de artículos (stock) y carrito de compra.\n\n**Autenticación:** `GET /login` devuelve `id_usuario` y `token`; todos los demás endpoints los exigen como parámetros de consulta (`id_usuario`, `token`). Cada login genera un token nuevo e invalida el anterior.\n\n**Errores:** cualquier error (incluido `Acceso denegado`) responde HTTP 400 con `{\"mensaje\": \"...\"}`; el éxito es HTTP 200.\n\n**Contraseñas:** el cliente envía el hash SHA-256 en hexadecimal (64 caracteres); el servidor lo guarda y compara tal cual.\n\nEste archivo se mantiene a mano: debe actualizarse siempre que cambie un endpoint (ver CLAUDE.md)."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/servicio/rest/ws",
+      "description": "Tomcat local (./dev.sh)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Sesión",
+      "description": "Inicio de sesión"
+    },
+    {
+      "name": "Usuarios",
+      "description": "Alta, consulta, modificación y baja de usuarios"
+    },
+    {
+      "name": "Artículos",
+      "description": "Catálogo (tablas stock y fotos_articulos)"
+    },
+    {
+      "name": "Carrito",
+      "description": "Carrito de compra de cada usuario (tabla carrito_compra)"
+    }
+  ],
+  "paths": {
+    "/login": {
+      "get": {
+        "tags": [
+          "Sesión"
+        ],
+        "summary": "Inicia sesión",
+        "description": "Verifica email y contraseña y escribe un token aleatorio de 20 caracteres en `usuarios.token`. Invalida el token anterior del usuario.",
+        "operationId": "login",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "ana@example.com"
+          },
+          {
+            "name": "password",
+            "in": "query",
+            "required": true,
+            "description": "Hash SHA-256 (hex) de la contraseña",
+            "schema": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credenciales correctas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sesion"
+                },
+                "example": {
+                  "id_usuario": 1,
+                  "token": "aB3dE5gH7jK9mN1pQ3sT"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/alta_usuario": {
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Registra un usuario",
+        "description": "No requiere sesión. `email`, `password`, `nombre`, `apellido_paterno` y `fecha_nacimiento` son obligatorios. El email es único. Si viene `foto` se inserta en `fotos_usuarios` dentro de la misma transacción.",
+        "operationId": "altaUsuario",
+        "responses": {
+          "200": {
+            "description": "Usuario dado de alta (mensaje: \"Se dio de alta el usuario\")",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Respuesta"
+                },
+                "example": {
+                  "mensaje": "OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Usuario"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/consulta_usuario": {
+      "get": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Consulta los datos del usuario",
+        "description": "Devuelve los datos del usuario de la sesión. `password` siempre es `null` y `foto` va en base64 (o `null`).",
+        "operationId": "consultaUsuario",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id_usuario"
+          },
+          {
+            "$ref": "#/components/parameters/token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Datos del usuario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Usuario"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/modifica_usuario": {
+      "put": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Modifica el usuario de la sesión",
+        "description": "Reemplaza los datos personales y la foto (se borra la foto anterior y se inserta la nueva si viene `foto`; con `foto: null` se quita). `password` **no puede omitirse**: una cadena vacía conserva la contraseña actual.",
+        "operationId": "modificaUsuario",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id_usuario"
+          },
+          {
+            "$ref": "#/components/parameters/token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usuario modificado (mensaje: \"Se modificó el usuario\")",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Respuesta"
+                },
+                "example": {
+                  "mensaje": "OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Usuario"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/borra_usuario": {
+      "delete": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Borra el usuario de la sesión",
+        "description": "En una sola transacción: regresa al stock lo que tenga en el carrito, borra el carrito, su foto y el usuario.",
+        "operationId": "borraUsuario",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id_usuario"
+          },
+          {
+            "$ref": "#/components/parameters/token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usuario borrado (mensaje: \"Se borró el usuario\")",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Respuesta"
+                },
+                "example": {
+                  "mensaje": "OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/alta_articulo": {
+      "post": {
+        "tags": [
+          "Artículos"
+        ],
+        "summary": "Da de alta un artículo",
+        "description": "Inserta en `stock` y en `fotos_articulos` dentro de una transacción. Obligatorios: `nombre`, `precio` (≥ 0), `cantidad` (≥ 0) y `fotografia` (base64).",
+        "operationId": "altaArticulo",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id_usuario"
+          },
+          {
+            "$ref": "#/components/parameters/token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operación exitosa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Respuesta"
+                },
+                "example": {
+                  "mensaje": "OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArticuloAlta"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/consulta_articulos": {
+      "get": {
+        "tags": [
+          "Artículos"
+        ],
+        "summary": "Busca artículos",
+        "description": "Busca la palabra en `nombre` y `descripcion` con `LIKE '%palabra%'`, ordenado por nombre. Una palabra vacía devuelve todos los artículos.",
+        "operationId": "consultaArticulos",
+        "parameters": [
+          {
+            "name": "palabra",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            },
+            "example": "mayonesa"
+          },
+          {
+            "$ref": "#/components/parameters/id_usuario"
+          },
+          {
+            "$ref": "#/components/parameters/token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arreglo de artículos (puede estar vacío). `cantidad` no se incluye.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArticuloBusqueda"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/compra_articulo": {
+      "put": {
+        "tags": [
+          "Carrito"
+        ],
+        "summary": "Compra un artículo (lo pasa del stock al carrito)",
+        "description": "En una transacción (con `SELECT ... FOR UPDATE` sobre el artículo): si `cantidad` ≤ existencias, inserta el artículo en `carrito_compra` o suma la cantidad si ya estaba, y resta la cantidad de `stock`. Si no hay suficientes: HTTP 400 \"No hay suficientes artículos en el stock\".",
+        "operationId": "compraArticulo",
+        "parameters": [
+          {
+            "name": "id_articulo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "cantidad",
+            "in": "query",
+            "required": true,
+            "description": "Unidades a comprar (> 0)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/id_usuario"
+          },
+          {
+            "$ref": "#/components/parameters/token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operación exitosa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Respuesta"
+                },
+                "example": {
+                  "mensaje": "OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/consulta_carrito_compra": {
+      "get": {
+        "tags": [
+          "Carrito"
+        ],
+        "summary": "Consulta el carrito del usuario",
+        "description": "No está en los requerimientos originales: lo usa la pantalla \"Artículos en el carrito\". El costo (cantidad × precio) y el total se calculan en el cliente. `cantidad` es la cantidad comprada.",
+        "operationId": "consultaCarritoCompra",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id_usuario"
+          },
+          {
+            "$ref": "#/components/parameters/token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Artículos del carrito (puede estar vacío)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArticuloCarrito"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/elimina_articulo_carrito_compra": {
+      "delete": {
+        "tags": [
+          "Carrito"
+        ],
+        "summary": "Quita un artículo del carrito",
+        "description": "En una transacción: suma la cantidad del carrito al `stock` y borra la fila de `carrito_compra`. Si el artículo no está en el carrito: HTTP 400.",
+        "operationId": "eliminaArticuloCarritoCompra",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id_usuario"
+          },
+          {
+            "name": "id_articulo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operación exitosa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Respuesta"
+                },
+                "example": {
+                  "mensaje": "OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/elimina_carrito_compra": {
+      "delete": {
+        "tags": [
+          "Carrito"
+        ],
+        "summary": "Vacía el carrito del usuario",
+        "description": "En una transacción: un `UPDATE stock` por cada artículo del carrito y un solo `DELETE` de las filas del usuario (no toca los carritos de otros). Con el carrito vacío también responde OK.",
+        "operationId": "eliminaCarritoCompra",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id_usuario"
+          },
+          {
+            "$ref": "#/components/parameters/token"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operación exitosa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Respuesta"
+                },
+                "example": {
+                  "mensaje": "OK"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "id_usuario": {
+        "name": "id_usuario",
+        "in": "query",
+        "required": true,
+        "description": "Id devuelto por /login",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "token": {
+        "name": "token",
+        "in": "query",
+        "required": true,
+        "description": "Token devuelto por /login",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Error (HTTP 400): mensaje de la excepción o \"Acceso denegado\" si `id_usuario`/`token` no son válidos",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Respuesta"
+            },
+            "example": {
+              "mensaje": "Acceso denegado"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Respuesta": {
+        "type": "object",
+        "properties": {
+          "mensaje": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mensaje"
+        ]
+      },
+      "Sesion": {
+        "type": "object",
+        "properties": {
+          "id_usuario": {
+            "type": "integer"
+          },
+          "token": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 20
+          }
+        },
+        "required": [
+          "id_usuario",
+          "token"
+        ]
+      },
+      "Usuario": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "password": {
+            "type": "string",
+            "nullable": true,
+            "description": "Hash SHA-256 en hexadecimal. En `modifica_usuario`, \"\" = no cambiarla. Siempre `null` en las respuestas."
+          },
+          "nombre": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "apellido_paterno": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "apellido_materno": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100
+          },
+          "fecha_nacimiento": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601, p. ej. 2000-01-31T00:00:00.000Z"
+          },
+          "telefono": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "genero": {
+            "type": "string",
+            "enum": [
+              "M",
+              "F"
+            ],
+            "nullable": true
+          },
+          "foto": {
+            "type": "string",
+            "format": "byte",
+            "nullable": true,
+            "description": "Imagen en base64 (sin prefijo data:)"
+          }
+        },
+        "required": [
+          "email",
+          "nombre",
+          "apellido_paterno",
+          "fecha_nacimiento"
+        ]
+      },
+      "ArticuloAlta": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "descripcion": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500
+          },
+          "precio": {
+            "type": "number",
+            "minimum": 0,
+            "description": "DECIMAL(10,2)",
+            "example": 42.5
+          },
+          "cantidad": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Existencias iniciales"
+          },
+          "fotografia": {
+            "type": "string",
+            "format": "byte",
+            "description": "Imagen en base64 (sin prefijo data:)"
+          }
+        },
+        "required": [
+          "nombre",
+          "precio",
+          "cantidad",
+          "fotografia"
+        ]
+      },
+      "ArticuloBusqueda": {
+        "type": "object",
+        "properties": {
+          "id_articulo": {
+            "type": "integer"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string",
+            "description": "Se omite si es null"
+          },
+          "precio": {
+            "type": "number"
+          },
+          "fotografia": {
+            "type": "string",
+            "format": "byte",
+            "description": "Base64; se omite si es null"
+          }
+        },
+        "required": [
+          "id_articulo",
+          "nombre",
+          "precio"
+        ]
+      },
+      "ArticuloCarrito": {
+        "type": "object",
+        "properties": {
+          "id_articulo": {
+            "type": "integer"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "precio": {
+            "type": "number"
+          },
+          "cantidad": {
+            "type": "integer",
+            "description": "Cantidad comprada (la que está en el carrito)"
+          },
+          "fotografia": {
+            "type": "string",
+            "format": "byte",
+            "description": "Base64; se omite si es null"
+          }
+        },
+        "required": [
+          "id_articulo",
+          "nombre",
+          "precio",
+          "cantidad"
+        ]
+      }
+    }
+  }
+}

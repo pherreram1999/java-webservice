@@ -1,0 +1,8 @@
+.env
+tomcat/
+jdk8/
+backend/servicio.war
+backend/WEB-INF/classes/
+backend/WEB-INF/lib/
+frontend/node_modules/
+frontend/dist/

@@ -1,0 +1,6 @@
+<Context>
+	<!--
+		La conexión a la base de datos ya no se define aquí: Servicio.java la configura con las
+		variables de entorno DB_HOST, DB_PORT, DB_NAME, DB_USER y DB_PASSWORD (archivo .env o sistema operativo).
+	-->
+</Context>
