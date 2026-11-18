@@ -1,39 +1,30 @@
 #!/usr/bin/env bash
-# Prueba de DELETE /elimina_carrito_compra
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-titulo "elimina_carrito_compra"
+# DELETE /elimina_carrito_compra — vacía el carrito y regresa todo al stock.
+#
+#   ./test/elimina_carrito_compra.sh
+#
+# Toma la sesión de las variables de entorno ID_USUARIO y TOKEN (las exporta  source test/login.sh <email>).
+# La URL del servicio sale de API_BASE (también la exporta login.sh). Imprime el comando curl
+# (con las variables, para copiarlo en ese mismo shell), el código HTTP y la respuesta
+# (los base64 largos se abrevian). Salida: 0 = HTTP 200, 1 = error del servicio, 2 = faltan datos o sin conexión.
 
-nuevo_usuario U
-nuevo_usuario V
-nuevo_articulo A "$U_ID" "$U_TOKEN" aaa 10 5     # stock 5
-nuevo_articulo B "$U_ID" "$U_TOKEN" bbb 20 2     # stock 2
+if [ -z "${API_BASE:-}" ]; then
+  echo "Falta API_BASE en el entorno (la exporta  source test/login.sh <email>, o:  export API_BASE=http://localhost:8080/servicio/rest/ws)" >&2
+  exit 2
+fi
+if [ -z "${ID_USUARIO:-}" ] || [ -z "${TOKEN:-}" ]; then
+  echo "Faltan ID_USUARIO y TOKEN en el entorno. Inicia sesión primero:  source test/login.sh <email>" >&2
+  exit 2
+fi
 
-api_compra "$U_ID" "$U_TOKEN" "$A" 3            # A: stock 2
-api_compra "$U_ID" "$U_TOKEN" "$B" 2            # B: stock 0
-api_compra "$V_ID" "$V_TOKEN" "$A" 2            # A: stock 0 (carrito de V)
+URL="$API_BASE/elimina_carrito_compra?id_usuario=$ID_USUARIO&token=$TOKEN"
 
-api_carrito "$U_ID" "$U_TOKEN"
-espera_jq 'length == 2' "antes de borrar, U tiene 2 artículos en el carrito"
+echo "curl -X DELETE \"\$API_BASE/elimina_carrito_compra?id_usuario=\$ID_USUARIO&token=\$TOKEN\""
+respuesta="$(curl -sS -w '\n%{http_code}' -X DELETE "$URL")" || exit 2
 
-api_elimina_carrito "$U_ID" "$U_TOKEN"
-espera 200 OK "vacía el carrito de U"
-api_carrito "$U_ID" "$U_TOKEN"
-espera_jq 'length == 0' "el carrito de U quedó vacío"
-
-api_carrito "$V_ID" "$V_TOKEN"
-espera_jq "length == 1 and .[0].id_articulo == $A and .[0].cantidad == 2" "el carrito de V no se tocó"
-
-api_compra "$V_ID" "$V_TOKEN" "$A" 3
-espera 200 OK "A: las 3 unidades de U regresaron al stock"
-api_compra "$V_ID" "$V_TOKEN" "$A" 1
-espera 400 "No hay suficientes artículos en el stock" "A: no regresó de más"
-api_compra "$V_ID" "$V_TOKEN" "$B" 2
-espera 200 OK "B: las 2 unidades de U regresaron al stock"
-
-api_elimina_carrito "$U_ID" "$U_TOKEN"
-espera 200 OK "vaciar un carrito que ya está vacío también es correcto"
-
-api_elimina_carrito "$U_ID" "token_falso"
-espera 400 "Acceso denegado" "token inválido"
-
-resumen
+codigo="${respuesta##*$'\n'}"
+cuerpo="${respuesta%$'\n'*}"
+echo "HTTP $codigo"
+jq 'walk(if type == "string" and length > 80 then .[0:40] + "... (\(length) caracteres)" else . end)' <<<"$cuerpo" 2>/dev/null || printf '%s\n' "$cuerpo"
+[ -z "${RESPUESTA:-}" ] || printf '%s' "$cuerpo" >"$RESPUESTA"   # copia completa del cuerpo (la usa todos.sh)
+[ "$codigo" = 200 ]

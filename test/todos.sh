@@ -1,68 +1,74 @@
 #!/usr/bin/env bash
-# Ejecuta las pruebas de todos los métodos del servicio y muestra un resumen.
+# Recorre los métodos de la tienda con la sesión del entorno y muestra un resumen.
 #
-#   ./test/todos.sh                 todas, en el orden de abajo
-#   ./test/todos.sh login compra_articulo     solo las indicadas (nombre del script sin .sh)
-#   API_BASE=http://host:8080/servicio/rest/ws ./test/todos.sh
+#   source test/login.sh <email>   &&   ./test/todos.sh
+#   ./test/todos.sh <email> [contraseña]          inicia sesión aquí mismo (con test/login.sh)
 #
-# Requiere Tomcat corriendo (./dev.sh) y la base creada con database/schema.sql.
-# Código de salida: 0 si todo pasó, 1 si alguna prueba falló, 2 si no se pudo probar (entorno).
+# Ejecuta, en orden: consulta_usuario, alta_articulo (crea "Prueba <fecha-hora>" con 5 piezas),
+# consulta_articulos, compra_articulo (2), consulta_carrito_compra, elimina_articulo_carrito_compra,
+# compra_articulo (1), elimina_carrito_compra y consulta_carrito_compra. Cada script imprime su curl.
+# OJO: elimina_carrito_compra vacía TODO el carrito del usuario, y el artículo creado se queda en stock
+# (no hay endpoint para borrarlo). alta_usuario, modifica_usuario y borra_usuario no se ejecutan aquí.
+# Salida: 0 = todo pasó, 1 = algún paso falló, 2 = sin sesión o sin conexión.
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-TODAS=(
-  alta_usuario
-  login
-  consulta_usuario
-  modifica_usuario
-  alta_articulo
-  consulta_articulos
-  compra_articulo
-  consulta_carrito_compra
-  elimina_articulo_carrito_compra
-  elimina_carrito_compra
-  borra_usuario
-)
-PRUEBAS=("${@:-${TODAS[@]}}")
-
-export TEST_RESUMEN
-TEST_RESUMEN="$(mktemp)"
-trap 'rm -f "$TEST_RESUMEN"' EXIT
+if [ $# -ge 1 ]; then
+  # shellcheck source=login.sh
+  source "$DIR/login.sh" "$@" || exit $?
+fi
+if [ -z "${API_BASE:-}" ] || [ -z "${ID_USUARIO:-}" ] || [ -z "${TOKEN:-}" ]; then
+  echo "Faltan API_BASE, ID_USUARIO y TOKEN en el entorno. Inicia sesión primero:  source test/login.sh <email>" >&2
+  exit 2
+fi
 
 if [ -t 1 ]; then VERDE=$'\033[32m'; ROJO=$'\033[31m'; NORMAL=$'\033[0m'; else VERDE=''; ROJO=''; NORMAL=''; fi
+export RESPUESTA
+RESPUESTA="$(mktemp)"
+trap 'rm -f "$RESPUESTA"' EXIT
+RESULTADOS=()
+FALLAS=0
 
-fallidas=()
-for p in "${PRUEBAS[@]}"; do
-  if [ ! -f "$DIR/$p.sh" ]; then
-    echo "No existe la prueba '$p' (busqué $DIR/$p.sh)" >&2
-    exit 2
-  fi
-  bash "$DIR/$p.sh"
+paso() { # descripción filtro-jq script [args...] : ejecuta el script; pasa si sale con 0 y el filtro da true
+  local desc="$1" filtro="$2" rc
+  shift 2
+  printf '\n%s== %s ==%s\n' "$VERDE" "$desc" "$NORMAL"
+  : >"$RESPUESTA"
+  bash "$DIR/$1.sh" "${@:2}"
   rc=$?
-  if [ "$rc" -eq 2 ]; then
-    echo >&2
-    echo "${ROJO}No se pudo ejecutar '$p' (problema de entorno); se detiene la corrida.${NORMAL}" >&2
-    exit 2
+  [ "$rc" -eq 2 ] && { echo "${ROJO}No se pudo ejecutar $1 (sin conexión o faltan datos).${NORMAL}" >&2; exit 2; }
+  if [ "$rc" -eq 0 ] && jq -e "$filtro" "$RESPUESTA" >/dev/null 2>&1; then
+    RESULTADOS+=("${VERDE}PASA ${NORMAL} $desc")
+  else
+    RESULTADOS+=("${ROJO}FALLA${NORMAL} $desc")
+    FALLAS=$((FALLAS + 1))
   fi
-  [ "$rc" -eq 0 ] || fallidas+=("$p")
-done
+}
+
+NOMBRE="Prueba $(date '+%Y-%m-%d %H:%M:%S')"
+
+paso "consulta el usuario de la sesión" '.email != null'                   consulta_usuario
+paso "da de alta \"$NOMBRE\""          '.mensaje == "OK"'                    alta_articulo "$NOMBRE" 19.90 5 "Artículo creado por test/todos.sh"
+paso "lo busca por nombre"             "any(.[]; .nombre == \"$NOMBRE\")"   consulta_articulos "$NOMBRE"
+ID_ARTICULO="$(jq -r --arg n "$NOMBRE" '[.[] | select(.nombre == $n)][0].id_articulo // empty' "$RESPUESTA" 2>/dev/null)"
+if [ -z "$ID_ARTICULO" ]; then
+  echo "${ROJO}No se encontró el artículo recién creado; no se puede seguir.${NORMAL}" >&2
+  exit 1
+fi
+paso "compra 2 piezas"                 '.mensaje == "OK"'                    compra_articulo "$ID_ARTICULO" 2
+paso "el carrito tiene las 2 piezas"   "any(.[]; .id_articulo == $ID_ARTICULO and .cantidad == 2)" consulta_carrito_compra
+paso "quita el artículo del carrito"   '.mensaje == "OK"'                    elimina_articulo_carrito_compra "$ID_ARTICULO"
+paso "compra 1 pieza"                  '.mensaje == "OK"'                    compra_articulo "$ID_ARTICULO" 1
+paso "vacía el carrito"                '.mensaje == "OK"'                    elimina_carrito_compra
+paso "el carrito quedó vacío"          'length == 0'                         consulta_carrito_compra
 
 echo
 echo "================ RESUMEN ================"
-total_ok=0
-total_mal=0
-while read -r nombre ok mal; do
-  total_ok=$((total_ok + ok))
-  total_mal=$((total_mal + mal))
-  if [ "$mal" -eq 0 ]; then marca="${VERDE}PASA ${NORMAL}"; else marca="${ROJO}FALLA${NORMAL}"; fi
-  printf '  %s  %-34s %3d correctas, %d fallidas\n' "$marca" "$nombre" "$ok" "$mal"
-done <"$TEST_RESUMEN"
+printf '  %s\n' "${RESULTADOS[@]}"
 echo "-----------------------------------------"
-printf '  Total: %d correctas, %d fallidas en %d scripts\n' "$total_ok" "$total_mal" "${#PRUEBAS[@]}"
-
-if [ "${#fallidas[@]}" -eq 0 ]; then
-  echo "${VERDE}Todas las pruebas pasaron.${NORMAL}"
+if [ "$FALLAS" -eq 0 ]; then
+  echo "${VERDE}Todos los pasos pasaron.${NORMAL}"
   exit 0
 fi
-echo "${ROJO}Fallaron: ${fallidas[*]}${NORMAL}"
+echo "${ROJO}Fallaron $FALLAS paso(s).${NORMAL}"
 exit 1

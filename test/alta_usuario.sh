@@ -1,47 +1,57 @@
 #!/usr/bin/env bash
-# Prueba de POST /alta_usuario
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-titulo "alta_usuario"
+# POST /alta_usuario — registra un usuario (no requiere sesión).
+#
+#   ./test/alta_usuario.sh <email> <contraseña> [nombre] [apellido_paterno] [AAAA-MM-DD] [apellido_materno] [teléfono] [M|F] [foto.png]
+#   ./test/alta_usuario.sh ana@example.com secreta Ana Pérez 2000-01-31 López 5512345678 F frontend/public/usuario_sin_foto.png
+#
+# Defaults: nombre Ana, apellido paterno Pérez, fecha 2000-01-31; el resto null. La contraseña se envía
+# como su SHA-256 (igual que el cliente web). La petición JSON se guarda en ${TMPDIR:-/tmp}/alta_usuario.json.
+# La URL del servicio sale de API_BASE (también la exporta login.sh). Imprime el comando curl
+# (con las variables, para copiarlo en ese mismo shell), el código HTTP y la respuesta.
+# Salida: 0 = HTTP 200, 1 = error del servicio, 2 = faltan datos o sin conexión.
 
-EMAIL="zz_test_${RUN}_alta@example.com"
-USUARIOS_PRUEBA+=("$EMAIL")
+if [ -z "${API_BASE:-}" ]; then
+  echo "Falta API_BASE en el entorno (la exporta  source test/login.sh <email>, o:  export API_BASE=http://localhost:8080/servicio/rest/ws)" >&2
+  exit 2
+fi
+if [ $# -lt 2 ]; then echo "Uso: $0 <email> <contraseña> [nombre] [apellido_paterno] [AAAA-MM-DD] [apellido_materno] [teléfono] [M|F] [foto]" >&2; exit 2; fi
+EMAIL="$1"
+CONTRASENA="$2"
+NOMBRE="${3-Ana}"
+APELLIDO_PATERNO="${4-Pérez}"
+FECHA="${5-2000-01-31}"
+APELLIDO_MATERNO="${6:-}"
+TELEFONO="${7:-}"
+GENERO="${8:-}"
+FOTO="${9:-}"
+HASH="$(printf '%s' "$CONTRASENA" | sha256sum | cut -d' ' -f1)"
+URL="$API_BASE/alta_usuario"
+PETICION="${TMPDIR:-/tmp}/alta_usuario.json"
 
-api_alta_usuario "$(json_usuario "$EMAIL" "$HASH_PRUEBA")"
-espera 200 "Se dio de alta el usuario" "alta de un usuario con foto"
+# fecha_nacimiento en ISO-8601; teléfono, género, apellido materno y foto vacíos = null
+if [ -n "$FOTO" ]; then
+  [ -f "$FOTO" ] || { echo "No existe la imagen $FOTO" >&2; exit 2; }
+  base64 -w0 "$FOTO" >"$PETICION.b64"
+else
+  : >"$PETICION.b64"
+fi
+jq -n --arg email "$EMAIL" --arg password "$HASH" --arg nombre "$NOMBRE" --arg ap "$APELLIDO_PATERNO" \
+      --arg am "$APELLIDO_MATERNO" --arg fecha "${FECHA}T00:00:00.000Z" --arg tel "$TELEFONO" --arg genero "$GENERO" \
+      --rawfile foto "$PETICION.b64" \
+  '{email: $email, password: $password, nombre: $nombre, apellido_paterno: $ap,
+    apellido_materno: (if $am == "" then null else $am end), fecha_nacimiento: $fecha,
+    telefono: (if $tel == "" then null else ($tel | tonumber) end), genero: (if $genero == "" then null else $genero end),
+    foto: (if $foto == "" then null else $foto end)}' >"$PETICION" || exit 2
+rm -f "$PETICION.b64"
 
-api_login "$EMAIL" "$HASH_PRUEBA"
-espera 200 - "el usuario dado de alta puede iniciar sesión"
-ID="$(jget .id_usuario)"; TOKEN="$(jget .token)"
+echo "curl -X POST \"\$API_BASE/alta_usuario\" -H 'Content-Type: application/json' --data-binary @$PETICION"
+echo "# $PETICION (base64 abreviado):"
+jq 'walk(if type == "string" and length > 80 then .[0:40] + "... (\(length) caracteres)" else . end)' "$PETICION"
+respuesta="$(curl -sS -w '\n%{http_code}' -X POST "$URL" -H 'Content-Type: application/json' --data-binary @"$PETICION")" || exit 2
 
-api_consulta_usuario "$ID" "$TOKEN"
-espera_jq ".email == \"$EMAIL\" and .nombre == \"Ana\" and .foto != null" "los datos y la foto quedaron guardados"
-
-api_alta_usuario "$(json_usuario "$EMAIL" "$HASH_PRUEBA")"
-espera 400 - "no permite repetir el email"
-
-# Sin foto
-EMAIL_2="zz_test_${RUN}_alta_sin_foto@example.com"
-USUARIOS_PRUEBA+=("$EMAIL_2")
-api_alta_usuario "$(json_usuario "$EMAIL_2" "$HASH_PRUEBA" Ana 0)"
-espera 200 "Se dio de alta el usuario" "alta de un usuario sin foto"
-api_login "$EMAIL_2" "$HASH_PRUEBA"
-api_consulta_usuario "$(jget .id_usuario)" "$(jget .token)"
-espera_jq '.foto == null' "sin foto: la consulta regresa foto null"
-
-# Campos obligatorios
-BASE_JSON="$(json_usuario "zz_test_${RUN}_invalido@example.com" "$HASH_PRUEBA")"
-api_alta_usuario "$(jq 'del(.email)' <<<"$BASE_JSON")"
-espera 400 "Se debe ingresar el email" "falta el email"
-api_alta_usuario "$(jq 'del(.password)' <<<"$BASE_JSON")"
-espera 400 "Se debe ingresar la contraseña" "falta la contraseña"
-api_alta_usuario "$(jq 'del(.nombre)' <<<"$BASE_JSON")"
-espera 400 "Se debe ingresar el nombre" "falta el nombre"
-api_alta_usuario "$(jq 'del(.apellido_paterno)' <<<"$BASE_JSON")"
-espera 400 "Se debe ingresar el apellido paterno" "falta el apellido paterno"
-api_alta_usuario "$(jq 'del(.fecha_nacimiento)' <<<"$BASE_JSON")"
-espera 400 "Se debe ingresar la fecha de nacimiento" "falta la fecha de nacimiento"
-
-api_login "zz_test_${RUN}_invalido@example.com" "$HASH_PRUEBA"
-espera 400 "Acceso denegado" "los intentos inválidos no crearon el usuario"
-
-resumen
+codigo="${respuesta##*$'\n'}"
+cuerpo="${respuesta%$'\n'*}"
+echo "HTTP $codigo"
+jq 'walk(if type == "string" and length > 80 then .[0:40] + "... (\(length) caracteres)" else . end)' <<<"$cuerpo" 2>/dev/null || printf '%s\n' "$cuerpo"
+[ -z "${RESPUESTA:-}" ] || printf '%s' "$cuerpo" >"$RESPUESTA"   # copia completa del cuerpo (la usa todos.sh)
+[ "$codigo" = 200 ]

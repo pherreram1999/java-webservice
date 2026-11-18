@@ -1,48 +1,32 @@
 #!/usr/bin/env bash
-# Prueba de PUT /compra_articulo
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-titulo "compra_articulo"
+# PUT /compra_articulo — pasa <cantidad> unidades del stock al carrito.
+#
+#   ./test/compra_articulo.sh <id_articulo> <cantidad>
+#
+# Toma la sesión de las variables de entorno ID_USUARIO y TOKEN (las exporta  source test/login.sh <email>).
+# La URL del servicio sale de API_BASE (también la exporta login.sh). Imprime el comando curl
+# (con las variables, para copiarlo en ese mismo shell), el código HTTP y la respuesta
+# (los base64 largos se abrevian). Salida: 0 = HTTP 200, 1 = error del servicio, 2 = faltan datos o sin conexión.
 
-nuevo_usuario U
-nuevo_articulo A "$U_ID" "$U_TOKEN" compra 15 10      # stock inicial: 10
+if [ -z "${API_BASE:-}" ]; then
+  echo "Falta API_BASE en el entorno (la exporta  source test/login.sh <email>, o:  export API_BASE=http://localhost:8080/servicio/rest/ws)" >&2
+  exit 2
+fi
+if [ -z "${ID_USUARIO:-}" ] || [ -z "${TOKEN:-}" ]; then
+  echo "Faltan ID_USUARIO y TOKEN en el entorno. Inicia sesión primero:  source test/login.sh <email>" >&2
+  exit 2
+fi
+if [ $# -lt 2 ]; then echo "Uso: $0 <id_articulo> <cantidad>" >&2; exit 2; fi
+ID_ARTICULO="$1"
+CANTIDAD="$2"
+URL="$API_BASE/compra_articulo?id_articulo=$ID_ARTICULO&cantidad=$CANTIDAD&id_usuario=$ID_USUARIO&token=$TOKEN"
 
-# --- Primera compra: INSERT en el carrito
-api_compra "$U_ID" "$U_TOKEN" "$A" 3
-espera 200 OK "compra 3 de 10 (stock queda en 7)"
-api_carrito "$U_ID" "$U_TOKEN"
-espera_jq "[.[] | select(.id_articulo == $A)] | length == 1 and .[0].cantidad == 3" "el artículo entró al carrito con cantidad 3"
+echo "curl -X PUT \"\$API_BASE/compra_articulo?id_articulo=$ID_ARTICULO&cantidad=$CANTIDAD&id_usuario=\$ID_USUARIO&token=\$TOKEN\""
+respuesta="$(curl -sS -w '\n%{http_code}' -X PUT "$URL")" || exit 2
 
-# --- Segunda compra del mismo artículo: suma, no duplica
-api_compra "$U_ID" "$U_TOKEN" "$A" 3
-espera 200 OK "compra otras 3 (stock queda en 4)"
-api_carrito "$U_ID" "$U_TOKEN"
-espera_jq "[.[] | select(.id_articulo == $A)] | length == 1 and .[0].cantidad == 6" "la cantidad se sumó en la misma línea del carrito (6)"
-
-# --- Más de lo que hay
-api_compra "$U_ID" "$U_TOKEN" "$A" 5
-espera 400 "No hay suficientes artículos en el stock" "pedir 5 cuando quedan 4"
-api_carrito "$U_ID" "$U_TOKEN"
-espera_jq "[.[] | select(.id_articulo == $A)] | .[0].cantidad == 6" "la compra rechazada no cambió el carrito"
-
-# --- Justo lo que queda
-api_compra "$U_ID" "$U_TOKEN" "$A" 4
-espera 200 OK "compra las 4 que quedaban (stock en 0)"
-api_compra "$U_ID" "$U_TOKEN" "$A" 1
-espera 400 "No hay suficientes artículos en el stock" "con stock en 0 ya no se puede comprar"
-
-# --- Otro usuario también depende del mismo stock
-nuevo_usuario V
-api_compra "$V_ID" "$V_TOKEN" "$A" 1
-espera 400 "No hay suficientes artículos en el stock" "el stock es compartido entre usuarios"
-
-# --- Validaciones
-api_compra "$U_ID" "$U_TOKEN" "$A" 0
-espera 400 "La cantidad a comprar debe ser mayor que cero" "cantidad 0"
-api_compra "$U_ID" "$U_TOKEN" "$A" -2
-espera 400 "La cantidad a comprar debe ser mayor que cero" "cantidad negativa"
-api_compra "$U_ID" "$U_TOKEN" 2147483000 1
-espera 400 "El artículo no existe" "artículo inexistente"
-api_compra "$U_ID" "token_falso" "$A" 1
-espera 400 "Acceso denegado" "token inválido"
-
-resumen
+codigo="${respuesta##*$'\n'}"
+cuerpo="${respuesta%$'\n'*}"
+echo "HTTP $codigo"
+jq 'walk(if type == "string" and length > 80 then .[0:40] + "... (\(length) caracteres)" else . end)' <<<"$cuerpo" 2>/dev/null || printf '%s\n' "$cuerpo"
+[ -z "${RESPUESTA:-}" ] || printf '%s' "$cuerpo" >"$RESPUESTA"   # copia completa del cuerpo (la usa todos.sh)
+[ "$codigo" = 200 ]

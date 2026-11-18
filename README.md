@@ -302,18 +302,31 @@ curl -X DELETE "$BASE/elimina_carrito_compra?id_usuario=$ID&token=$TOKEN"
 
 Para comprobar el stock: `SELECT id_articulo,nombre,cantidad FROM stock;` y `SELECT * FROM carrito_compra;` en MySQL.
 
-### Pruebas automáticas con curl (`test/`)
+### Scripts de prueba con curl (`test/`)
 
-Con Tomcat corriendo (`./dev.sh`) y la base creada:
+Un script autónomo por método web; cada uno imprime el comando `curl` exacto que ejecuta (sirve como documentación), el código HTTP y la respuesta (los base64 largos se abrevian). La URL del servicio y la sesión se toman de las variables de entorno `API_BASE`, `ID_USUARIO` y `TOKEN`, que exporta `login.sh` (si `API_BASE` no está definida usa `http://localhost:8080/servicio/rest/ws`); el `curl` impreso usa esas variables, así que se puede copiar y ejecutar en el mismo shell. Con Tomcat corriendo (`./dev.sh`):
 
 ```bash
-./test/todos.sh                          # todas las pruebas y un resumen al final
-./test/todos.sh login compra_articulo    # solo algunas (nombre del script sin .sh)
-./test/compra_articulo.sh                # o un solo método, directamente
-API_BASE=http://otro-host:8080/servicio/rest/ws ./test/todos.sh
+export API_BASE=http://localhost:8080/servicio/rest/ws
+./test/alta_usuario.sh ana@example.com secreta Ana Pérez 2000-01-31   # no requiere sesión (sí API_BASE)
+source test/login.sh ana@example.com              # pide la contraseña y exporta API_BASE, ID_USUARIO y TOKEN
+# eval "$(./test/login.sh ana@example.com)"       # equivalente, ejecutándolo como script
+
+./test/consulta_usuario.sh
+./test/modifica_usuario.sh ana@example.com "" "Ana María"   # "" = conservar la contraseña
+./test/alta_articulo.sh Mayonesa 42.50 10 "Frasco de 400 g" [foto.png]
+./test/consulta_articulos.sh mayo
+./test/compra_articulo.sh <id_articulo> <cantidad>
+./test/consulta_carrito_compra.sh
+./test/elimina_articulo_carrito_compra.sh <id_articulo>
+./test/elimina_carrito_compra.sh
+./test/borra_usuario.sh                           # pide confirmación (--si para omitirla)
+
+./test/todos.sh                                   # recorrido de la tienda con la sesión actual y resumen
+./test/todos.sh ana@example.com                   # lo mismo, iniciando sesión antes
 ```
 
-Hay un script por método web (`alta_usuario`, `login`, `consulta_usuario`, `modifica_usuario`, `borra_usuario`, `alta_articulo`, `consulta_articulos`, `compra_articulo`, `consulta_carrito_compra`, `elimina_articulo_carrito_compra`, `elimina_carrito_compra`). Cada uno crea sus propios datos (prefijo `zz_test_<id>`), prueba el caso correcto y los errores (validaciones, «Acceso denegado», stock insuficiente) y verifica que el stock y el carrito queden consistentes. Al terminar borra lo que creó: los usuarios con el propio servicio y los artículos directamente en MySQL con las credenciales de `.env` (no existe un endpoint para borrar artículos; sin cliente `mysql` quedan en `stock` con el prefijo `zz_test_`). Requiere `curl` y `jq`. Código de salida: 0 todo bien, 1 alguna prueba falló, 2 no se pudo probar (servicio o base no disponibles).
+Para otro servidor: `export API_BASE=http://otro-host:8080/servicio/rest/ws` antes del login. Las peticiones JSON se guardan en `${TMPDIR:-/tmp}/<método>.json` (el comando impreso las usa con `--data-binary @...`). `todos.sh` da de alta un artículo «Prueba <fecha-hora>» (queda en `stock`, no hay endpoint para borrarlo), lo compra, lo quita del carrito y **vacía todo el carrito** del usuario. Requiere `curl`, `jq` y `sha256sum`. Código de salida: 0 = HTTP 200, 1 = el servicio respondió error, 2 = falta `API_BASE`, la sesión o argumentos, o no hay conexión.
 
 ### Qué errores indican qué
 

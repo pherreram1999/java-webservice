@@ -1,36 +1,33 @@
 #!/usr/bin/env bash
-# Prueba de DELETE /borra_usuario
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-titulo "borra_usuario"
+# DELETE /borra_usuario — borra el usuario con sesión iniciada (su carrito regresa al stock).
+#
+#   ./test/borra_usuario.sh [--si]      --si = sin pedir confirmación
+#
+# Toma la sesión de las variables de entorno ID_USUARIO y TOKEN (las exporta  source test/login.sh <email>).
+# La URL del servicio sale de API_BASE (también la exporta login.sh). Imprime el comando curl
+# (con las variables, para copiarlo en ese mismo shell), el código HTTP y la respuesta
+# (los base64 largos se abrevian). Salida: 0 = HTTP 200, 1 = error del servicio, 2 = faltan datos o sin conexión.
 
-# --- Usuario simple (con foto, sin carrito)
-nuevo_usuario W
-api_borra_usuario "$W_ID" "token_falso"
-espera 400 "Acceso denegado" "token inválido: no borra nada"
-api_consulta_usuario "$W_ID" "$W_TOKEN"
-espera 200 - "el usuario sigue existiendo tras el intento inválido"
+if [ -z "${API_BASE:-}" ]; then
+  echo "Falta API_BASE en el entorno (la exporta  source test/login.sh <email>, o:  export API_BASE=http://localhost:8080/servicio/rest/ws)" >&2
+  exit 2
+fi
+if [ -z "${ID_USUARIO:-}" ] || [ -z "${TOKEN:-}" ]; then
+  echo "Faltan ID_USUARIO y TOKEN en el entorno. Inicia sesión primero:  source test/login.sh <email>" >&2
+  exit 2
+fi
+if [ "${1:-}" != "--si" ] && [ -t 0 ]; then
+  read -rp "¿Borrar el usuario $ID_USUARIO? Esto no se puede deshacer [s/N] " r
+  [ "$r" = s ] || [ "$r" = S ] || { echo "Cancelado."; exit 2; }
+fi
+URL="$API_BASE/borra_usuario?id_usuario=$ID_USUARIO&token=$TOKEN"
 
-api_borra_usuario "$W_ID" "$W_TOKEN"
-espera 200 "Se borró el usuario" "borra el usuario (y su foto)"
-api_login "$W_EMAIL" "$W_HASH"
-espera 400 "Acceso denegado" "ya no puede iniciar sesión"
-api_consulta_usuario "$W_ID" "$W_TOKEN"
-espera 400 "Acceso denegado" "su token ya no es válido"
+echo "curl -X DELETE \"\$API_BASE/borra_usuario?id_usuario=\$ID_USUARIO&token=\$TOKEN\""
+respuesta="$(curl -sS -w '\n%{http_code}' -X DELETE "$URL")" || exit 2
 
-# --- Usuario con artículos en el carrito: deben regresar al stock
-nuevo_usuario U
-nuevo_usuario V
-nuevo_articulo A "$V_ID" "$V_TOKEN" borra 10.5 5
-
-api_compra "$U_ID" "$U_TOKEN" "$A" 5
-espera 200 OK "U compra todo el stock del artículo (5 de 5)"
-api_compra "$V_ID" "$V_TOKEN" "$A" 1
-espera 400 "No hay suficientes artículos en el stock" "el stock quedó en 0"
-
-api_borra_usuario "$U_ID" "$U_TOKEN"
-espera 200 "Se borró el usuario" "borra al usuario que tenía el carrito lleno"
-
-api_compra "$V_ID" "$V_TOKEN" "$A" 5
-espera 200 OK "las 5 unidades del carrito del usuario borrado regresaron al stock"
-
-resumen
+codigo="${respuesta##*$'\n'}"
+cuerpo="${respuesta%$'\n'*}"
+echo "HTTP $codigo"
+jq 'walk(if type == "string" and length > 80 then .[0:40] + "... (\(length) caracteres)" else . end)' <<<"$cuerpo" 2>/dev/null || printf '%s\n' "$cuerpo"
+[ -z "${RESPUESTA:-}" ] || printf '%s' "$cuerpo" >"$RESPUESTA"   # copia completa del cuerpo (la usa todos.sh)
+[ "$codigo" = 200 ]
