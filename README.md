@@ -19,7 +19,7 @@ mysql -u <usuario> -p < database/schema.sql    # crea la base y las tablas
 | Script | Qué hace |
 |---|---|
 | `./setup.sh` | Instala JDK 8 en `jdk8/`, Tomcat en `tomcat/`, las bibliotecas en `backend/WEB-INF/lib` y las dependencias del cliente (`frontend/node_modules`). Es idempotente. Requiere Node.js 20.19+ instalado en el sistema (se detecta también si viene de nvm). |
-| `./build.sh` | Compila, empaca `servicio.war`, reemplaza el despliegue anterior, compila el cliente (`npm run build`) y publica `frontend/dist` en `webapps/ROOT`. Con Tomcat corriendo, se redespliega solo. `./build.sh back` compila solo el servicio y `./build.sh front` solo el cliente. |
+| `./build.sh` | Compila, empaca `servicio.war`, reemplaza el despliegue anterior, compila el cliente (`npm run build`) y publica `frontend/dist` en `webapps/ROOT`. Con Tomcat corriendo, se redespliega solo. `./build.sh back` compila solo el servicio y `./build.sh front` solo el cliente. Si está corriendo el Tomcat de **producción** (en segundo plano: `scripts/inicia.sh` o `catalina.sh start`), solo compila y no toca `webapps`; para publicar ahí hay que agregar `--despliega` (p. ej. `./build.sh back --despliega`). |
 | `./dev.sh` | Inicia Tomcat y muestra el puerto en el que corre. Falla con un aviso si el puerto está ocupado. |
 | `./dev.sh stop` | Detiene un Tomcat iniciado en otra terminal. |
 | `scripts/` | Scripts de producción: `inicia.sh` / `detiene.sh` (Tomcat en segundo plano), `arranque.sh` (inicio automático con cron), `certificado.sh` (HTTPS con Let's Encrypt → PKCS12 → `server.xml`) y `puertos.sh` (iptables 80 → 8080, 443 → 8443). Ver [scripts/README.md](scripts/README.md). |

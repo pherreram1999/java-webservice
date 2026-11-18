@@ -37,11 +37,12 @@ PUERTO_HTTPS="${PUERTO_HTTPS:-${HTTPS_PUERTO:-8443}}"
 # Agrega la regla si no existe (-C la busca, -A la añade al final de la cadena)
 regla() {
   local cmd="$1" cadena="$2" desde="$3" hacia="$4"; shift 4
-  local args=(-t nat "$cadena" -p tcp "$@" --dport "$desde" -m comment --comment "$COMENTARIO" -j REDIRECT --to-ports "$hacia")
-  if "${SUDO[@]}" "$cmd" -C "${args[@]}" 2>/dev/null; then
+  # La acción (-C/-A) va justo antes de la cadena: "iptables -t nat -A PREROUTING ..."
+  local args=("$cadena" -p tcp "$@" --dport "$desde" -m comment --comment "$COMENTARIO" -j REDIRECT --to-ports "$hacia")
+  if "${SUDO[@]}" "$cmd" -t nat -C "${args[@]}" 2>/dev/null; then
     echo "  [$cmd] ya existe: $cadena $desde -> $hacia"
   else
-    "${SUDO[@]}" "$cmd" -A "${args[@]}"
+    "${SUDO[@]}" "$cmd" -t nat -A "${args[@]}"
     echo "  [$cmd] agregada:  $cadena $desde -> $hacia"
   fi
 }
@@ -85,9 +86,14 @@ aplica() {
     done
   fi
 
-  if [ "$local_tambien" = 0 ] && puerto_ocupado 80; then
-    echo "AVISO: hay un servidor escuchando en el puerto 80 de esta máquina (¿nginx?). El tráfico externo" >&2
-    echo "       al 80 ahora va a Tomcat; desde la propia máquina, http://localhost/ sigue yendo a ese servidor." >&2
+  if [ "$local_tambien" = 0 ]; then
+    if puerto_ocupado 80; then
+      echo "AVISO: hay un servidor escuchando en el puerto 80 de esta máquina (¿nginx?). El tráfico externo" >&2
+      echo "       al 80 ahora va a Tomcat; desde la propia máquina, http://localhost/ sigue yendo a ese servidor." >&2
+    else
+      echo "Nota: solo se redirige el tráfico que llega de otras máquinas; para que http://localhost/ también" >&2
+      echo "      funcione desde este servidor usa --local (o --persistente --local)." >&2
+    fi
   fi
   [ -n "$(puerto_https)" ] || echo "AVISO: Tomcat aún no tiene conector HTTPS; el 443 no responderá hasta ejecutar scripts/certificado.sh" >&2
   echo "Las reglas se pierden al reiniciar; para conservarlas: scripts/puertos.sh --persistente"
@@ -126,7 +132,10 @@ case "${1:-}" in
       | "${SUDO[@]}" tee "/etc/systemd/system/$UNIDAD" >/dev/null
     "${SUDO[@]}" systemctl daemon-reload
     quita_reglas >/dev/null   # las vuelve a poner el servicio, sin duplicar
-    "${SUDO[@]}" systemctl enable --now "$UNIDAD"
+    "${SUDO[@]}" systemctl enable "$UNIDAD"
+    # restart (no "enable --now"): si el servicio ya estaba activo, --now no lo vuelve a ejecutar
+    # y las reglas recién quitadas no se volverían a poner
+    "${SUDO[@]}" systemctl restart "$UNIDAD"
     echo "Servicio $UNIDAD instalado y habilitado: las redirecciones se aplican en cada arranque."
     ;;
   --no-persistente)

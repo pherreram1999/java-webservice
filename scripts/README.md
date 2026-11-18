@@ -19,14 +19,15 @@ Los de desarrollo (`setup.sh`, `build.sh`, `dev.sh`) siguen en la raíz del proy
 ./setup.sh                                   # JDK 8, Tomcat, bibliotecas y dependencias del cliente
 cp .env.example .env                         # y editar DB_USER / DB_PASSWORD (y HTTPS_PUERTO / CERT_CORREO si hace falta)
 mysql -u <usuario> -p < database/schema.sql  # crea la base y las tablas
-./build.sh                                   # compila y despliega servicio y cliente en tomcat/webapps
+./build.sh --despliega                       # compila y despliega servicio y cliente en tomcat/webapps
+                                             #   (sin --despliega, con producción corriendo solo compila)
 scripts/inicia.sh                            # Tomcat en segundo plano: http://<servidor>:8080/
 scripts/arranque.sh                          # que vuelva a iniciar solo tras cada reinicio
 scripts/puertos.sh --persistente             # 80 -> 8080 y 443 -> 8443, también tras reiniciar
-scripts/certificado.sh midominio.com --correo admin@midominio.com --webroot "$PWD/tomcat/webapps/ROOT"
+scripts/certificado.sh midominio.com --correo admin@midominio.com   # con Tomcat corriendo
 ```
 
-Para el certificado se usa `--webroot` con la carpeta pública de Tomcat porque, con la redirección de `puertos.sh` activa, la validación de Let's Encrypt en el puerto 80 llega a Tomcat (ver [certificado.sh](#certificadosh)). Si no vas a redirigir puertos, basta con `scripts/certificado.sh midominio.com`.
+Con la redirección de `puertos.sh` activa, la validación de Let's Encrypt en el puerto 80 llega a Tomcat, así que `certificado.sh` lo detecta y usa solo `--webroot` con la carpeta pública de Tomcat (`tomcat/webapps/ROOT`); por eso Tomcat debe estar corriendo al emitir y en cada renovación (ver [certificado.sh](#certificadosh)).
 
 Variables de `.env` que usan estos scripts, además de las `DB_*` (ver el [README principal](../README.md#variables-de-entorno)):
 
@@ -95,7 +96,7 @@ Obtiene un certificado gratuito de Let's Encrypt con **certbot** y deja Tomcat s
 **Modos de validación**
 
 - **Standalone** (sin `--webroot`): certbot levanta su propio servidor en el puerto 80, que tiene que estar libre. Si algo lo ocupa, el script se detiene y sugiere `--webroot`.
-- **`--webroot <carpeta>`**: el servidor que ya atiende el puerto 80 sirve el reto `.well-known/acme-challenge/` desde esa carpeta. Con `puertos.sh` activo ese servidor es Tomcat, así que usa `--webroot "$PWD/tomcat/webapps/ROOT"`. Si es nginx/Apache, usa su carpeta pública para ese dominio (p. ej. `/usr/share/nginx/html`).
+- **`--webroot <carpeta>`**: el servidor que ya atiende el puerto 80 sirve el reto `.well-known/acme-challenge/` desde esa carpeta. Con `puertos.sh` activo ese servidor es Tomcat: el script lo detecta (regla `servicio-web` del puerto 80) y usa `tomcat/webapps/ROOT` sin que lo indiques; exige que Tomcat esté corriendo. Si es nginx/Apache, usa su carpeta pública para ese dominio (p. ej. `/usr/share/nginx/html`).
 
 **Pasos que sigue**
 
@@ -149,7 +150,7 @@ sudo iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443
 - Sin `--persistente`, las reglas **se pierden al reiniciar**. `--persistente` instala `/etc/systemd/system/servicio-web-puertos.service` (oneshot), que las aplica después de la red y de firewalld y las quita al detenerse. El inicio de Tomcat (`arranque.sh`) es aparte.
 - `PREROUTING` solo afecta al tráfico que llega de otras máquinas. Desde el propio servidor `http://localhost/` no se redirige, salvo que uses `--local`. Para probar en local usa `http://localhost:8080/` o `--local`.
 - **firewalld** filtra después de la redirección, así que ve los puertos 8080/8443: el script los abre en la zona por defecto (en tiempo de ejecución y de forma permanente). También hay que permitir 80/443 en el router o en el firewall externo, si lo hay.
-- Si en el servidor hay otro servidor web en el 80/443 (nginx, Apache), con la redirección activa el tráfico externo va a Tomcat y ya no a ese servidor, y certbot standalone deja de recibir la validación: usa `certificado.sh --webroot "$PWD/tomcat/webapps/ROOT"`. La alternativa es no redirigir y que nginx/Apache termine TLS y haga de proxy hacia `http://localhost:8080`.
+- Si en el servidor hay otro servidor web en el 80/443 (nginx, Apache), con la redirección activa el tráfico externo va a Tomcat y ya no a ese servidor, y certbot standalone dejaría de recibir la validación: por eso `certificado.sh` cambia solo a `--webroot` sobre `tomcat/webapps/ROOT`. La alternativa es no redirigir y que nginx/Apache termine TLS y haga de proxy hacia `http://localhost:8080`.
 - Requiere iptables (en Fedora, `iptables-nft`, que convive con firewalld) y `sudo`.
 
 Si el cliente se sirve desde otro origen, `VITE_HOST_SERVICIO` debe usar `https://` para evitar contenido mixto.

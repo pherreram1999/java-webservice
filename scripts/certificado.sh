@@ -13,7 +13,9 @@
 #
 #   --correo    correo para avisos de Let's Encrypt (o variable CERT_CORREO); sin él se registra sin correo
 #   --webroot   carpeta pública del servidor web que ya atiende el puerto 80 para ese dominio
-#               (p. ej. /usr/share/nginx/html); certbot deja ahí el reto .well-known/acme-challenge/
+#               (p. ej. /usr/share/nginx/html); certbot deja ahí el reto .well-known/acme-challenge/.
+#               Si la redirección de scripts/puertos.sh está activa se usa sola tomcat/webapps/ROOT
+#               (Tomcat debe estar corriendo, también en cada renovación)
 #   --staging   usa el entorno de pruebas de Let's Encrypt (certificado no confiable, sin límites de emisión)
 #   HTTPS_PUERTO  puerto del conector HTTPS (por defecto 8443; Tomcat corre sin root y no puede abrir el 443)
 #
@@ -165,8 +167,21 @@ command -v certbot >/dev/null 2>&1 || error "No se encontró certbot (Fedora: su
 [[ "$HTTPS_PUERTO" =~ ^[0-9]+$ ]] || error "HTTPS_PUERTO no es un número: $HTTPS_PUERTO"
 [ "$HTTPS_PUERTO" -ge 1024 ] || error "Tomcat corre sin root y no puede abrir el puerto $HTTPS_PUERTO; usa uno ≥ 1024 (ver README, sección HTTPS)"
 [ "$HTTPS_PUERTO" != "$(puerto_http)" ] || error "HTTPS_PUERTO ($HTTPS_PUERTO) es el mismo que el puerto HTTP de Tomcat"
+# Con la redirección de scripts/puertos.sh activa, lo que llega al puerto 80 va a Tomcat y no al
+# servidor temporal de certbot standalone: el reto se sirve entonces desde la carpeta pública de Tomcat
+if [ -z "$WEBROOT" ] && sudo iptables -t nat -S PREROUTING 2>/dev/null \
+     | grep -F -- "--comment servicio-web" | grep -q -- "--dport 80 "; then
+  WEBROOT="$CATALINA_HOME/webapps/ROOT"
+  echo "La redirección 80 -> $(puerto_http) de scripts/puertos.sh está activa: se usa --webroot $WEBROOT"
+fi
 if [ -n "$WEBROOT" ]; then
   [ -d "$WEBROOT" ] || error "No existe la carpeta --webroot $WEBROOT"
+  if [ "$WEBROOT" = "$CATALINA_HOME/webapps/ROOT" ]; then
+    puerto_ocupado "$(puerto_http)" \
+      || error "Tomcat no está corriendo: debe atender el reto de Let's Encrypt en el puerto 80. Inícialo con scripts/inicia.sh"
+    # Se crea como este usuario (no root) para que ./build.sh front pueda reemplazar ROOT después
+    mkdir -p "$WEBROOT/.well-known/acme-challenge"
+  fi
   MODO=(--webroot -w "$WEBROOT")
 else
   puerto_ocupado 80 && error "El puerto 80 está ocupado (¿nginx/Apache?). certbot standalone lo necesita libre; usa --webroot <carpeta pública de ese servidor>"
