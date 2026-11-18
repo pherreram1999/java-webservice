@@ -22,9 +22,14 @@ mysql -u <usuario> -p < database/schema.sql    # crea la base y las tablas
 | `./build.sh` | Compila, empaca `servicio.war`, reemplaza el despliegue anterior, compila el cliente (`npm run build`) y publica `frontend/dist` en `webapps/ROOT`. Con Tomcat corriendo, se redespliega solo. `./build.sh back` compila solo el servicio y `./build.sh front` solo el cliente. |
 | `./dev.sh` | Inicia Tomcat y muestra el puerto en el que corre. Falla con un aviso si el puerto está ocupado. |
 | `./dev.sh stop` | Detiene un Tomcat iniciado en otra terminal. |
+| `scripts/` | Scripts de producción: `inicia.sh` / `detiene.sh` (Tomcat en segundo plano), `arranque.sh` (inicio automático con cron), `certificado.sh` (HTTPS con Let's Encrypt → PKCS12 → `server.xml`) y `puertos.sh` (iptables 80 → 8080, 443 → 8443). Ver [scripts/README.md](scripts/README.md). |
 | `./dev.sh front` | Servidor de desarrollo de Vite en `http://localhost:5173` con recarga en caliente; reenvía `/servicio/...` al Tomcat (que debe estar corriendo con `./dev.sh` en otra terminal). |
 
 Después de modificar `backend/servicio/*.java` basta con ejecutar `./build.sh`. Para trabajar en el cliente conviene `./dev.sh` en una terminal y `./dev.sh front` en otra.
+
+## Producción
+
+Para dejar el servicio en un servidor (Tomcat en segundo plano, inicio automático, HTTPS con Let's Encrypt y puertos 80/443) ver **[scripts/README.md](scripts/README.md)**, que explica cada script y trae la secuencia completa de puesta en marcha.
 
 ## Cliente (frontend/)
 
@@ -52,6 +57,9 @@ Se leen del archivo `.env` (en la raíz) si existe, y si no, del sistema operati
 | `DB_NAME` | No | `servicio_web` | Nombre de la base de datos. |
 | `JAVA_HOME` | No | `./jdk8` | JDK a usar (si se define en `.env`, `setup.sh` no descarga el JDK 8). |
 | `CATALINA_HOME` | No | `./tomcat` | Directorio de Tomcat. |
+| `HTTPS_PUERTO` | No | `8443` | Puerto del conector HTTPS que configura `scripts/certificado.sh` (≥ 1024). |
+| `CERT_CORREO` | No | — | Correo para los avisos de Let's Encrypt (equivale a `--correo` de `scripts/certificado.sh`). |
+| `VITE_HOST_SERVICIO` | No | mismo origen | Host del servicio REST que usa el cliente, p. ej. `http://mi-servidor:8080` (la ruta `/servicio/rest/ws` es fija). Vite lo incrusta al compilar (`./build.sh front`) o al iniciar `./dev.sh front`, así que hay que recompilar al cambiarlo. Si es otro origen, el servicio debe permitir CORS. También puede ir en `frontend/.env` al usar `npm` directamente. |
 
 ## Endpoints del servicio REST
 

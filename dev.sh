@@ -27,9 +27,7 @@ fi
 [ -n "${DB_USER:-}" ] || echo "AVISO: DB_USER no está definido (.env o entorno); el servicio no podrá conectar a la base de datos." >&2
 [ -f "$CATALINA_HOME/webapps/servicio.war" ] || echo "AVISO: servicio.war no está desplegado, ejecuta ./build.sh" >&2
 
-# Puerto HTTP: el primer <Connector> HTTP/1.1 de conf/server.xml (8080 por defecto)
-PUERTO="$(sed -n 's/.*<Connector port="\([0-9]*\)" protocol="HTTP\/1\.1".*/\1/p' "$CATALINA_HOME/conf/server.xml" | head -1)"
-PUERTO="${PUERTO:-8080}"
+PUERTO="$(puerto_http)"
 
 if (exec 3<>"/dev/tcp/localhost/$PUERTO") 2>/dev/null; then
   error "El puerto $PUERTO ya está en uso (¿Tomcat ya está corriendo? prueba ./dev.sh stop)"

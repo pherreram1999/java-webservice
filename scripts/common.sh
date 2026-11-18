@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Funciones y configuración compartidas por setup.sh, build.sh y dev.sh (se usa con "source").
+# Funciones y configuración compartidas por setup.sh, build.sh, dev.sh y los scripts de producción
+# de esta carpeta (se usa con "source").
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -58,4 +59,31 @@ requiere_node() {
 requiere_tomcat() {
   [ -x "$CATALINA_HOME/bin/catalina.sh" ] \
     || error "No se encontró Tomcat en $CATALINA_HOME. Ejecuta ./setup.sh"
+}
+
+# Puerto HTTP: el primer <Connector> HTTP/1.1 de conf/server.xml (8080 por defecto)
+puerto_http() {
+  local p
+  p="$(sed -n 's/.*<Connector port="\([0-9]*\)" protocol="HTTP\/1\.1".*/\1/p' "$CATALINA_HOME/conf/server.xml" | head -1)"
+  echo "${p:-8080}"
+}
+
+# 0 si algo escucha en localhost:$1
+puerto_ocupado() { (exec 3<>"/dev/tcp/localhost/$1") 2>/dev/null; }
+
+# Archivo con el PID del Tomcat de producción (lo usan inicia.sh y detiene.sh)
+# (no se exporta aquí: con CATALINA_PID definido, "./dev.sh stop" abortaría al no existir el archivo)
+PID_PRODUCCION="$CATALINA_HOME/temp/catalina.pid"
+
+# HTTPS (certificado.sh): bloque del conector marcado en conf/server.xml y archivos del certificado
+MARCA_HTTPS_INICIO="<!-- servicio-web: conector HTTPS (generado por certificado.sh) -->"
+MARCA_HTTPS_FIN="<!-- servicio-web: fin conector HTTPS -->"
+DIR_CERTIFICADO="$CATALINA_HOME/conf/certificado"
+
+# Puerto del conector HTTPS configurado por certificado.sh (vacío si no hay)
+puerto_https() {
+  awk -v i="$MARCA_HTTPS_INICIO" -v f="$MARCA_HTTPS_FIN" '
+    index($0, i) { dentro = 1 } index($0, f) { dentro = 0 }
+    dentro && match($0, /port="[0-9]+"/) { print substr($0, RSTART + 6, RLENGTH - 7); exit }' \
+    "$CATALINA_HOME/conf/server.xml"
 }
