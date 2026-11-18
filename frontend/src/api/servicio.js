@@ -5,7 +5,11 @@
     - datos:  cuerpo de la respuesta ya convertido de JSON (en error: { mensaje })
   Nunca lanza excepciones: un fallo de red se reporta como ok=false.
 */
-const URL_BASE = "/servicio/rest/ws";
+// Host del servicio (p. ej. http://mi-servidor:8080), definido al compilar con la variable
+// VITE_HOST_SERVICIO; si no se define, se usa el mismo origen que sirve el cliente.
+// La ruta /servicio/rest/ws es fija.
+const HOST_SERVICIO = (import.meta.env.VITE_HOST_SERVICIO || "").replace(/\/+$/, "");
+const URL_BASE = `${HOST_SERVICIO}/servicio/rest/ws`;
 
 async function consulta(metodo, recurso, parametros, cuerpo) {
   let url = `${URL_BASE}/${recurso}`;

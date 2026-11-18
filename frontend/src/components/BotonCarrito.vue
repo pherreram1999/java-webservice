@@ -1,5 +1,5 @@
 <script setup>
-// Botón de carrito del encabezado al estilo Amazon: carrito grande, número de piezas en naranja
+// Botón de carrito del encabezado (azul de marca) al estilo Amazon: carrito grande, número de piezas en ámbar
 // sobre la cesta y la palabra "Carrito" en negritas. Lee el contador del store de Pinia.
 import { computed, ref, watch } from "vue";
 import { useCarritoStore } from "../stores/carrito.js";
@@ -24,7 +24,7 @@ watch(cantidad, () => {
   <RouterLink
     to="/carrito"
     :aria-label="etiqueta"
-    class="flex h-11 items-end gap-0.5 rounded-lg border border-transparent px-2 pb-1 text-tinta transition hover:border-tinta/60"
+    class="flex h-11 items-end gap-0.5 rounded-lg border border-transparent px-2 pb-1 text-white transition hover:border-white/60"
   >
     <svg viewBox="0 0 48 40" class="h-9 w-11 shrink-0 overflow-visible" fill="none" aria-hidden="true">
       <!-- Carrito: asa, cesta y ruedas -->
@@ -37,14 +37,14 @@ watch(cantidad, () => {
       />
       <circle cx="17" cy="36" r="2.6" fill="currentColor" />
       <circle cx="35" cy="36" r="2.6" fill="currentColor" />
-      <!-- Cantidad en naranja, centrada sobre la cesta -->
+      <!-- Cantidad en ámbar, centrada sobre la cesta -->
       <text
         x="26"
         y="25"
         text-anchor="middle"
         font-weight="700"
         :font-size="texto.length > 2 ? 14 : 18"
-        class="fill-contador font-display"
+        class="fill-contador-sobre-marca font-display"
         :class="{ rebote: rebotando }"
       >
         {{ texto }}

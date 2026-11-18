@@ -62,14 +62,21 @@ function salir() {
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-[1120px] px-4 pt-12 pb-16 sm:px-6">
-    <p class="antetitulo">Menú principal</p>
-    <h1 class="titulo mt-2">
-      <template v-if="usuario">Hola, {{ usuario.nombre }}</template>
-      <span v-else class="inline-block h-10 w-56 animate-pulse rounded-lg bg-hundido align-middle" />
-    </h1>
+  <div class="w-full">
+    <!-- Franja de bienvenida: continúa el azul del encabezado; las tarjetas montan sobre ella -->
+    <div class="sobre-marca bg-marca">
+      <div class="mx-auto w-full max-w-[1120px] px-4 pt-10 pb-24 sm:px-6">
+        <p class="antetitulo text-sobre-marca-tenue">Menú principal</p>
+        <h1 class="titulo mt-2 text-white">
+          <template v-if="usuario">Hola, {{ usuario.nombre }}</template>
+          <span v-else class="inline-block h-10 w-56 animate-pulse rounded-lg bg-white/15 align-middle" />
+        </h1>
+        <p class="mt-2.5 text-base text-sobre-marca">¿Qué quieres hacer hoy?</p>
+      </div>
+    </div>
 
-    <div class="mt-8 flex flex-wrap items-stretch gap-6">
+  <div class="mx-auto -mt-16 w-full max-w-[1120px] px-4 pb-16 sm:px-6">
+    <div class="flex flex-wrap items-stretch gap-6">
       <!-- Resumen del perfil -->
       <section class="tarjeta min-w-0 flex-[999_1_520px] p-7">
         <div v-if="cargando" class="flex items-center gap-5" aria-busy="true" aria-label="Cargando perfil">
@@ -106,21 +113,22 @@ function salir() {
 
       <!-- Accesos -->
       <aside class="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
+        <!-- Tarjeta clara: sobre la franja azul una tarjeta azul se perdería -->
         <RouterLink
           to="/perfil"
-          class="group flex flex-1 flex-col justify-between gap-6 rounded-2xl bg-marca p-6 text-white transition hover:bg-marca-fuerte"
+          class="tarjeta flex items-center gap-4 px-6 py-5 text-left transition hover:border-marca"
         >
-          <span class="grid size-11 place-items-center rounded-xl bg-white/15">
+          <span class="grid size-11 place-items-center rounded-xl bg-marca-suave text-marca">
             <Icono nombre="usuario" />
           </span>
           <span>
-            <span class="block text-[17px] font-semibold">Perfil del usuario</span>
-            <span class="mt-1 block text-sm leading-normal text-[#d6e0f7]">Modifica tus datos, contraseña y foto.</span>
+            <span class="block font-semibold">Perfil del usuario</span>
+            <span class="mt-0.5 block text-sm text-tinta-suave">Modifica tus datos, contraseña y foto</span>
           </span>
         </RouterLink>
         <RouterLink
           to="/captura-articulo"
-          class="tarjeta flex items-center gap-4 px-6 py-5 text-left transition hover:border-borde-fuerte"
+          class="tarjeta flex items-center gap-4 px-6 py-5 text-left transition hover:border-marca"
         >
           <span class="grid size-11 place-items-center rounded-xl bg-marca-suave text-marca">
             <Icono nombre="caja" />
@@ -132,7 +140,7 @@ function salir() {
         </RouterLink>
         <RouterLink
           to="/compra-articulos"
-          class="tarjeta flex items-center gap-4 px-6 py-5 text-left transition hover:border-borde-fuerte"
+          class="tarjeta flex items-center gap-4 px-6 py-5 text-left transition hover:border-marca"
         >
           <span class="grid size-11 place-items-center rounded-xl bg-marca-suave text-marca">
             <Icono nombre="carrito" />
@@ -144,7 +152,7 @@ function salir() {
         </RouterLink>
         <button
           type="button"
-          class="tarjeta flex items-center gap-4 px-6 py-5 text-left transition hover:border-borde-fuerte"
+          class="tarjeta flex items-center gap-4 px-6 py-5 text-left transition hover:border-marca"
           @click="salir"
         >
           <span class="grid size-11 place-items-center rounded-xl bg-hundido text-tinta-suave">
@@ -170,5 +178,6 @@ function salir() {
         <Icono nombre="basura" :tam="16" /> Eliminar perfil
       </button>
     </section>
+  </div>
   </div>
 </template>

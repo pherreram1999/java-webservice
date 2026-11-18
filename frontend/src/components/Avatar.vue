@@ -8,6 +8,8 @@ const props = defineProps({
   nombre: { type: String, default: "" },
   apellido: { type: String, default: "" },
   tam: { type: Number, default: 40 },
+  // Iniciales en azul sobre fondo claro, para usarlo encima del color de marca (encabezado)
+  claro: { type: Boolean, default: false },
 });
 
 const texto = computed(() => iniciales(props.nombre, props.apellido));
@@ -23,7 +25,8 @@ const estilo = computed(() => ({
   <span
     v-else
     :style="estilo"
-    class="grid shrink-0 place-items-center rounded-full bg-marca font-display font-semibold text-white select-none"
+    :class="claro ? 'bg-sobre-marca text-marca' : 'bg-marca text-white'"
+    class="grid shrink-0 place-items-center rounded-full font-display font-semibold select-none"
     aria-hidden="true"
     >{{ texto }}</span
   >

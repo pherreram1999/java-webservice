@@ -23,7 +23,12 @@
   --color-tinta: #1b2333;       /* texto principal */
   --color-tinta-suave: #5b6578; /* texto secundario */
 
-  --color-contador: #c45500;    /* número del carrito (naranja estilo Amazon, con contraste AA sobre fondo claro) */
+  --color-contador: #c45500;    /* número del carrito sobre fondo claro (naranja estilo Amazon, contraste AA) */
+
+  /* Texto y detalles sobre el azul de marca (encabezado y franja de bienvenida) */
+  --color-sobre-marca: #dbe4fb;        /* texto secundario sobre marca */
+  --color-sobre-marca-tenue: #bfcff5;  /* antetítulos sobre marca */
+  --color-contador-sobre-marca: #fbbf24; /* número del carrito sobre marca (ámbar; el naranja no contrasta) */
 }
 
 /* Base de todos los botones; en Tailwind v4 solo las utilidades se pueden usar con @apply */
@@ -45,6 +50,10 @@
   :focus-visible {
     outline: 2px solid var(--color-marca);
     outline-offset: 2px;
+  }
+  /* Sobre el azul de marca el contorno azul no se ve: se usa blanco */
+  .sobre-marca :focus-visible {
+    outline-color: #fff;
   }
 }
 
